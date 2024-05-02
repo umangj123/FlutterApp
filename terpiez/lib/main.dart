@@ -138,6 +138,8 @@ class StatisticsTab extends StatelessWidget {
         children: <Widget>[
           Text('Total Captures: ${userModel.terpiezCaught}'),
           Text('Days Played: ${userModel.getDaysPlayed()}'),
+          Text('User Id: ${userModel.userId}'),
+
         ],
       ),
     );
