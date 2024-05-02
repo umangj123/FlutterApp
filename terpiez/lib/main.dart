@@ -135,38 +135,70 @@ class StatisticsTab extends StatelessWidget {
   }
 }
 
-
-class DetailsScreen extends StatelessWidget {
+class DetailsScreen extends StatefulWidget {
   final String terpiezType;
 
   DetailsScreen({required this.terpiezType});
 
   @override
+  _DetailsScreenState createState() => _DetailsScreenState();
+}
+
+class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<Color?> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _animation = ColorTween(
+      begin: Colors.blue,
+      end: Colors.red,
+    ).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Details of $terpiezType')),
+      appBar: AppBar(title: Text('Details of ${widget.terpiezType}')),
       body: SingleChildScrollView(
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Hero(
-                tag: 'hero-$terpiezType',
+                tag: 'hero-${widget.terpiezType}',
                 child: Icon(Icons.pets, size: 100),
               ),
               SizedBox(height: 20),
-              Text(terpiezType, style: Theme.of(context).textTheme.headline5),
-              AnimatedContainer(
-                duration: Duration(seconds: 1),
-                width: double.infinity,
-                height: 200,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.blue, Colors.red],
-                  ),
-                ),
+              Text(widget.terpiezType, style: Theme.of(context).textTheme.headline5),
+              SizedBox(height: 20),
+              AnimatedBuilder(
+                animation: _animation,
+                builder: (context, child) {
+                  return Container(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - MediaQuery.of(context).padding.top,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [_animation.value!, Colors.yellow],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -175,3 +207,43 @@ class DetailsScreen extends StatelessWidget {
     );
   }
 }
+
+// class DetailsScreen extends StatelessWidget {
+//   final String terpiezType;
+
+//   DetailsScreen({required this.terpiezType});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: Text('Details of $terpiezType')),
+//       body: SingleChildScrollView(
+//         child: Center(
+//           child: Column(
+//             mainAxisAlignment: MainAxisAlignment.center,
+//             children: [
+//               Hero(
+//                 tag: 'hero-$terpiezType',
+//                 child: Icon(Icons.pets, size: 100),
+//               ),
+//               SizedBox(height: 20),
+//               Text(terpiezType, style: Theme.of(context).textTheme.headline5),
+//               AnimatedContainer(
+//                 duration: Duration(seconds: 1),
+//                 width: double.infinity,
+//                 height: 200,
+//                 decoration: BoxDecoration(
+//                   gradient: LinearGradient(
+//                     begin: Alignment.topLeft,
+//                     end: Alignment.bottomRight,
+//                     colors: [Colors.blue, Colors.red],
+//                   ),
+//                 ),
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
