@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/user_model.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
   runApp(
@@ -88,28 +92,138 @@ class ListTab extends StatelessWidget {
   }
 }
 
-class FinderTab extends StatelessWidget {
+class FinderTab extends StatefulWidget {
+  @override
+  _FinderTabState createState() => _FinderTabState();
+}
+
+class _FinderTabState extends State<FinderTab> {
+  MapController mapController = MapController();
+  LatLng currentPosition = LatLng(51.5, -0.09); // Default to London
+  List<Marker> terpiezMarkers = [];
+  double closestDistance = double.infinity;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeLocation();
+  }
+
+  Future<void> _initializeLocation() async {
+    var status = await Permission.locationWhenInUse.status;
+    if (!status.isGranted) {
+      await Permission.locationWhenInUse.request();
+    }
+
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() {
+      currentPosition = LatLng(position.latitude, position.longitude);
+      _addTerpiezLocations();
+    });
+  }
+
+  void _addTerpiezLocations() {
+    setState(() {
+      terpiezMarkers = [
+        Marker(
+          point: LatLng(currentPosition.latitude + 0.01, currentPosition.longitude),
+          child: Icon(Icons.location_on, color: Colors.red, size: 40),
+        ),
+        Marker(
+          point: LatLng(currentPosition.latitude, currentPosition.longitude + 0.01),
+          child: Icon(Icons.location_on, color: Colors.green, size: 40),
+        ),
+        Marker(
+          point: LatLng(currentPosition.latitude - 0.01, currentPosition.longitude),
+          child: Icon(Icons.location_on, color: Colors.blue, size: 40),
+        ),
+      ];
+      _updateClosestDistance();
+    });
+  }
+
+  void _updateClosestDistance() {
+    if (terpiezMarkers.isNotEmpty) {
+      closestDistance = terpiezMarkers
+        .map((m) => Geolocator.distanceBetween(
+          currentPosition.latitude, currentPosition.longitude,
+          m.point.latitude, m.point.longitude))
+        .reduce((val, elem) => val < elem ? val : elem);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      child: GestureDetector(
-        onTap: () => Provider.of<UserModel>(context, listen: false).incrementTerpiez(),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Image.asset('assets/map.png'),
-              SizedBox(height: 20), // Adds a bit of spacing
-              Text('Tap anywhere on the map to capture Terpiez!'),
-              SizedBox(height: 20), // Adds a bit of spacing
-              Text('Distance to nearest Terpiez: 100m'), // Re-added text
-            ],
+      child: Column(
+        children: [
+          Container(
+            height: 300, // Adjust the height as needed
+            child: FlutterMap(
+              mapController: mapController,
+              options: MapOptions(
+                center: currentPosition,
+                zoom: 13.0,
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  subdomains: ['a', 'b', 'c'],
+                ),
+                MarkerLayer(markers: terpiezMarkers),
+              ],
+            ),
           ),
-        ),
+          Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Text('Closest Terpiez: ${closestDistance.toStringAsFixed(2)} m'),
+                SizedBox(height: 10),
+                ElevatedButton(
+                  onPressed: closestDistance <= 10 ? () {
+                    Provider.of<UserModel>(context, listen: false).incrementTerpiez();
+                  } : null,
+                  child: Text('Catch Terpiez'),
+                  style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                      (Set<MaterialState> states) {
+                        if (states.contains(MaterialState.disabled)) return Colors.grey;
+                        return Colors.green; // Use the component's default.
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+// class FinderTab extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return SingleChildScrollView(
+//       child: GestureDetector(
+//         onTap: () => Provider.of<UserModel>(context, listen: false).incrementTerpiez(),
+//         child: Center(
+//           child: Column(
+//             mainAxisAlignment: MainAxisAlignment.center,
+//             children: <Widget>[
+//               Image.asset('assets/map.png'),
+//               SizedBox(height: 20), // Adds a bit of spacing
+//               Text('Tap anywhere on the map to capture Terpiez!'),
+//               SizedBox(height: 20), // Adds a bit of spacing
+//               Text('Distance to nearest Terpiez: 100m'), // Re-added text
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 class StatisticsTab extends StatelessWidget {
   @override
