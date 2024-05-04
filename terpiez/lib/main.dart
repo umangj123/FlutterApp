@@ -5,6 +5,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+
 
 void main() {
   runApp(
@@ -99,7 +101,7 @@ class FinderTab extends StatefulWidget {
 
 class _FinderTabState extends State<FinderTab> {
   MapController mapController = MapController();
-  LatLng currentPosition = LatLng(51.5, -0.09); // Default to London
+  LatLng currentPosition = LatLng(38.9072, -77.0369); // Washington D.C.
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
 
@@ -109,38 +111,50 @@ class _FinderTabState extends State<FinderTab> {
     _initializeLocation();
   }
 
-  Future<void> _initializeLocation() async {
-    var status = await Permission.locationWhenInUse.status;
-    if (!status.isGranted) {
-      await Permission.locationWhenInUse.request();
-    }
-
-    Position position = await Geolocator.getCurrentPosition();
-    setState(() {
-      currentPosition = LatLng(position.latitude, position.longitude);
-      _addTerpiezLocations();
-    });
+void _initializeLocation() async {
+  var status = await Permission.locationWhenInUse.status;
+  if (!status.isGranted) {
+    await Permission.locationWhenInUse.request();
   }
 
-  void _addTerpiezLocations() {
+  Geolocator.getPositionStream().listen((Position position) {
+    setState(() {
+      currentPosition = LatLng(position.latitude, position.longitude);
+      mapController.move(currentPosition, mapController.camera.zoom);
+      _addTerpiezLocations();
+    });
+  });
+}
+
+
+void _addTerpiezLocations() {
     setState(() {
       terpiezMarkers = [
         Marker(
-          point: LatLng(currentPosition.latitude + 0.01, currentPosition.longitude),
+          point: LatLng(38.9894234, -76.9365122), // Example location 1
           child: Icon(Icons.location_on, color: Colors.red, size: 40),
         ),
         Marker(
-          point: LatLng(currentPosition.latitude, currentPosition.longitude + 0.01),
+          point: LatLng(38.9898838, -76.9357573), // Example location 2
           child: Icon(Icons.location_on, color: Colors.green, size: 40),
         ),
         Marker(
-          point: LatLng(currentPosition.latitude - 0.01, currentPosition.longitude),
+          point: LatLng(38.9904098, -76.9354582), // Example location 3
           child: Icon(Icons.location_on, color: Colors.blue, size: 40),
         ),
+        Marker(
+          point: LatLng(38.9910234, -76.9357278), // Example location 4
+          child: Icon(Icons.location_on, color: Colors.orange, size: 40),
+        ),
+        Marker(
+          point: LatLng(38.9917493, -76.9357927), // Example location 5
+          child: Icon(Icons.location_on, color: Colors.purple, size: 40),
+        )
       ];
       _updateClosestDistance();
     });
   }
+
 
   void _updateClosestDistance() {
     if (terpiezMarkers.isNotEmpty) {
@@ -158,19 +172,21 @@ class _FinderTabState extends State<FinderTab> {
       child: Column(
         children: [
           Container(
-            height: 300, // Adjust the height as needed
+            height: 300,
             child: FlutterMap(
               mapController: mapController,
               options: MapOptions(
                 center: currentPosition,
-                zoom: 13.0,
+                zoom: 13.0,              
               ),
               children: [
                 TileLayer(
                   urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                  userAgentPackageName:'net.tlserver6y.flutter_map_location_marker.example',
                   subdomains: ['a', 'b', 'c'],
                 ),
                 MarkerLayer(markers: terpiezMarkers),
+                CurrentLocationLayer()
               ],
             ),
           ),
@@ -202,6 +218,7 @@ class _FinderTabState extends State<FinderTab> {
     );
   }
 }
+
 // class FinderTab extends StatelessWidget {
 //   @override
 //   Widget build(BuildContext context) {
