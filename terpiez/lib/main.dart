@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/user_model.dart';
@@ -105,6 +107,9 @@ class _FinderTabState extends State<FinderTab> {
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
 
+  StreamSubscription<Position>? positionStreamSubscription; // Declare the subscription variable
+
+
   @override
   void initState() {
     super.initState();
@@ -117,15 +122,22 @@ void _initializeLocation() async {
     await Permission.locationWhenInUse.request();
   }
 
-  Geolocator.getPositionStream().listen((Position position) {
-    setState(() {
-      currentPosition = LatLng(position.latitude, position.longitude);
-      mapController.move(currentPosition, mapController.camera.zoom);
-      _addTerpiezLocations();
-    });
+    positionStreamSubscription = Geolocator.getPositionStream().listen((Position position) {
+    if(mounted){
+      setState(() {
+        currentPosition = LatLng(position.latitude, position.longitude);
+        mapController.move(currentPosition, mapController.camera.zoom);
+        _addTerpiezLocations();
+      });
+    }
   });
 }
 
+@override
+void dispose() {
+  positionStreamSubscription?.cancel();  // Cancel the subscription
+  super.dispose();
+}
 
 void _addTerpiezLocations() {
     setState(() {
