@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'redis_service.dart';
+import 'package:path_provider/path_provider.dart';
+
 
 
 void main() {
@@ -27,10 +33,72 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(),
+      home: LoginPage(),
     );
   }
 }
+
+
+class LoginPage extends StatefulWidget {
+  @override
+  _LoginPageState createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _storage = FlutterSecureStorage();
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final RedisService _redisService = RedisService();
+  bool _loading = false;
+
+  void _login() async {
+    setState(() => _loading = true);
+    // Save credentials securely
+    await _storage.write(key: 'username', value: _usernameController.text);
+    await _storage.write(key: 'password', value: _passwordController.text);
+    // Attempt to connect to Redis
+    bool connected = await _redisService.connect(_usernameController.text, _passwordController.text);
+    setState(() => _loading = false);
+    if (connected) {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MyHomePage()));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect to Redis')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Login to Redis')),
+      body: Padding(
+        padding: EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            TextField(
+              controller: _usernameController,
+              decoration: InputDecoration(labelText: 'Username'),
+            ),
+            TextField(
+              controller: _passwordController,
+              decoration: InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+            SizedBox(height: 20),
+            _loading
+                ? CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _login,
+                    child: Text('Login'),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 
 class MyHomePage extends StatefulWidget {
   @override
@@ -104,8 +172,15 @@ class FinderTab extends StatefulWidget {
 class _FinderTabState extends State<FinderTab> {
   MapController mapController = MapController();
   LatLng currentPosition = LatLng(38.9072, -77.0369); // Washington D.C.
+  Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
+  Map<String, List<LatLng>> terpiezLocations = {}; // New data structure for Terpiez Id  to locations
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
+  List<Map<String, dynamic>> alllocations = []; 
+  RedisService redisService = RedisService();
+  String closestID = "";
+  LatLng closestTerpLocation = LatLng(0,0);
+
 
   StreamSubscription<Position>? positionStreamSubscription; // Declare the subscription variable
 
@@ -121,62 +196,120 @@ void _initializeLocation() async {
   if (!status.isGranted) {
     await Permission.locationWhenInUse.request();
   }
-
+    alllocations = await redisService.fetchAllLocations();
     positionStreamSubscription = Geolocator.getPositionStream().listen((Position position) {
     if(mounted){
       setState(() {
         currentPosition = LatLng(position.latitude, position.longitude);
         mapController.move(currentPosition, mapController.camera.zoom);
-        _addTerpiezLocations();
+        _updateMapMarkers();
       });
     }
   });
 }
 
+void _updateMapMarkers() async {
+    double closest = double.infinity;
+    Marker? closestMarker;
+
+    for (var location in alllocations) {
+      String locationKey = "${location['lat']},${location['lon']}";
+      if (!caughtLocations.contains(locationKey)) {
+        double distance = Geolocator.distanceBetween(
+          currentPosition.latitude, currentPosition.longitude,
+          location['lat'], location['lon']
+        );
+        if (distance < closest) {
+          closest = distance;
+          closestID = location['id'];
+          closestTerpLocation = LatLng(location['lat'], location['lon']);
+          closestMarker = Marker(
+            point: LatLng(location['lat'], location['lon']),
+            child: Icon(Icons.location_on, color: Colors.red, size:30),
+          );
+        }
+      }
+    }
+    print("closestID: $closestID");
+    if (closestMarker != null) {
+      closestDistance = closest;
+      setState(() {
+        terpiezMarkers = [closestMarker!];
+      });
+    }
+    else {
+      setState(() {
+        terpiezMarkers = [];
+      });
+    }
+  }
+
+  void markTerpiezAsCaught(LatLng location, String terpiezId) {
+    caughtLocations.add("${location.latitude},${location.longitude}");
+
+    // Add the location to the terpiezLocations map
+    if (!terpiezLocations.containsKey(terpiezId)) {
+      terpiezLocations[terpiezId] = [];
+    }
+    terpiezLocations[terpiezId]!.add(location);
+
+    print('Caught Terpiez $terpiezId at $location');
+    print('caughtLocations: $caughtLocations');
+    print('Caught Terpiez Ids and Locations: $terpiezLocations');
+
+    _updateMapMarkers();
+  }
+
+  Future<void> handleNewCatch(String terpiezId) async {
+    var terpiezData = await redisService.fetchTerpiezData(terpiezId);
+    if (terpiezData != null) {
+      String thumbnailKey = terpiezData['thumbnail'];
+      String imageKey = terpiezData['image'];
+      print('id: $terpiezId');
+      print('name: ${terpiezData['name']}');
+      print('Thumbnail Key: $thumbnailKey');
+      print('Image Key: $imageKey');
+
+      var thumbData = await redisService.fetchImageData(thumbnailKey);
+      var imageData = await redisService.fetchImageData(imageKey);
+
+      print('Image data obtained');
+
+      if (thumbData != null && imageData != null) {
+        await saveImageLocally(thumbData, 'thumb_$terpiezId.jpg');
+        await saveImageLocally(imageData, 'image_$terpiezId.jpg');
+        print('Images saved locally');
+      }
+      await saveTerpiezDataLocally(terpiezId, terpiezData);
+      print('handleNewCatch completed');
+    }
+
+  }
+
+  Future<void> saveImageLocally(String base64Data, String filename) async {
+    var bytes = base64Decode(base64Data);
+    String dir = (await getApplicationDocumentsDirectory()).path;
+    File file = File('$dir/$filename');
+    print('File path: ${file.path}');
+    await file.writeAsBytes(bytes);
+  }
+
+  Future<void> saveTerpiezDataLocally(String terpiezId, Map<String, dynamic> data) async {
+    String dir = (await getApplicationDocumentsDirectory()).path;
+    File file = File('$dir/terpiez_$terpiezId.json');
+    await file.writeAsString(jsonEncode(data));
+    print('Terpiez data saved locally');
+  }
+
+
+
 @override
 void dispose() {
   positionStreamSubscription?.cancel();  // Cancel the subscription
+  redisService.disconnect();
   super.dispose();
 }
 
-void _addTerpiezLocations() {
-    setState(() {
-      terpiezMarkers = [
-        Marker(
-          point: LatLng(38.9894234, -76.9365122), // Example location 1
-          child: Icon(Icons.location_on, color: Colors.red, size: 40),
-        ),
-        Marker(
-          point: LatLng(38.9898838, -76.9357573), // Example location 2
-          child: Icon(Icons.location_on, color: Colors.green, size: 40),
-        ),
-        Marker(
-          point: LatLng(38.9904098, -76.9354582), // Example location 3
-          child: Icon(Icons.location_on, color: Colors.blue, size: 40),
-        ),
-        Marker(
-          point: LatLng(38.9910234, -76.9357278), // Example location 4
-          child: Icon(Icons.location_on, color: Colors.orange, size: 40),
-        ),
-        Marker(
-          point: LatLng(38.9917493, -76.9357927), // Example location 5
-          child: Icon(Icons.location_on, color: Colors.purple, size: 40),
-        )
-      ];
-      _updateClosestDistance();
-    });
-  }
-
-
-  void _updateClosestDistance() {
-    if (terpiezMarkers.isNotEmpty) {
-      closestDistance = terpiezMarkers
-        .map((m) => Geolocator.distanceBetween(
-          currentPosition.latitude, currentPosition.longitude,
-          m.point.latitude, m.point.longitude))
-        .reduce((val, elem) => val < elem ? val : elem);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -211,6 +344,8 @@ void _addTerpiezLocations() {
                 ElevatedButton(
                   onPressed: closestDistance <= 10 ? () {
                     Provider.of<UserModel>(context, listen: false).incrementTerpiez();
+                    handleNewCatch(closestID);
+                    markTerpiezAsCaught(closestTerpLocation, closestID);
                   } : null,
                   child: Text('Catch Terpiez'),
                   style: ButtonStyle(
@@ -230,29 +365,6 @@ void _addTerpiezLocations() {
     );
   }
 }
-
-// class FinderTab extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return SingleChildScrollView(
-//       child: GestureDetector(
-//         onTap: () => Provider.of<UserModel>(context, listen: false).incrementTerpiez(),
-//         child: Center(
-//           child: Column(
-//             mainAxisAlignment: MainAxisAlignment.center,
-//             children: <Widget>[
-//               Image.asset('assets/map.png'),
-//               SizedBox(height: 20), // Adds a bit of spacing
-//               Text('Tap anywhere on the map to capture Terpiez!'),
-//               SizedBox(height: 20), // Adds a bit of spacing
-//               Text('Distance to nearest Terpiez: 100m'), // Re-added text
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
 
 class StatisticsTab extends StatelessWidget {
   @override
@@ -350,43 +462,3 @@ class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProvider
     );
   }
 }
-
-// class DetailsScreen extends StatelessWidget {
-//   final String terpiezType;
-
-//   DetailsScreen({required this.terpiezType});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: Text('Details of $terpiezType')),
-//       body: SingleChildScrollView(
-//         child: Center(
-//           child: Column(
-//             mainAxisAlignment: MainAxisAlignment.center,
-//             children: [
-//               Hero(
-//                 tag: 'hero-$terpiezType',
-//                 child: Icon(Icons.pets, size: 100),
-//               ),
-//               SizedBox(height: 20),
-//               Text(terpiezType, style: Theme.of(context).textTheme.headline5),
-//               AnimatedContainer(
-//                 duration: Duration(seconds: 1),
-//                 width: double.infinity,
-//                 height: 200,
-//                 decoration: BoxDecoration(
-//                   gradient: LinearGradient(
-//                     begin: Alignment.topLeft,
-//                     end: Alignment.bottomRight,
-//                     colors: [Colors.blue, Colors.red],
-//                   ),
-//                 ),
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
