@@ -172,8 +172,8 @@ class FinderTab extends StatefulWidget {
 class _FinderTabState extends State<FinderTab> {
   MapController mapController = MapController();
   LatLng currentPosition = LatLng(38.9072, -77.0369); // Washington D.C.
-  Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
-  Map<String, List<LatLng>> terpiezLocations = {}; // New data structure for Terpiez Id  to locations
+  //Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
+  //Map<String, List<LatLng>> terpiezLocations = {}; // New data structure for Terpiez Id  to locations
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
   List<Map<String, dynamic>> alllocations = []; 
@@ -214,7 +214,7 @@ void _updateMapMarkers() async {
 
     for (var location in alllocations) {
       String locationKey = "${location['lat']},${location['lon']}";
-      if (!caughtLocations.contains(locationKey)) {
+      if (!Provider.of<UserModel>(context, listen: false).caughtLocationSet.contains(locationKey)) {
         double distance = Geolocator.distanceBetween(
           currentPosition.latitude, currentPosition.longitude,
           location['lat'], location['lon']
@@ -245,17 +245,17 @@ void _updateMapMarkers() async {
   }
 
   void markTerpiezAsCaught(LatLng location, String terpiezId) {
-    caughtLocations.add("${location.latitude},${location.longitude}");
+    Provider.of<UserModel>(context, listen: false).caughtLocationSet.add("${location.latitude},${location.longitude}");
 
     // Add the location to the terpiezLocations map
-    if (!terpiezLocations.containsKey(terpiezId)) {
-      terpiezLocations[terpiezId] = [];
+    if (!Provider.of<UserModel>(context, listen: false).terpiezMaster.containsKey(terpiezId)) {
+      Provider.of<UserModel>(context, listen: false).terpiezMaster[terpiezId] = [];
     }
-    terpiezLocations[terpiezId]!.add(location);
+    Provider.of<UserModel>(context, listen: false).terpiezMaster[terpiezId]!.add(location);
 
     print('Caught Terpiez $terpiezId at $location');
-    print('caughtLocations: $caughtLocations');
-    print('Caught Terpiez Ids and Locations: $terpiezLocations');
+    print('caughtLocations: ${Provider.of<UserModel>(context, listen: false).caughtLocationSet}');
+    print('Caught Terpiez Ids and Locations: ${Provider.of<UserModel>(context, listen: false).terpiezMaster}');
 
     _updateMapMarkers();
   }

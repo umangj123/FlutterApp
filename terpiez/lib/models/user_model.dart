@@ -7,12 +7,15 @@ class UserModel with ChangeNotifier {
   int _terpiezCaught = 0;
   DateTime? _startDate;
   String? _userId;
+  Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
+  Map<String, List<LatLng>> terpiezIDLoc = {};
   //Map<String, List<LatLng>> _terpiezMaster = {}; 
 
   int get terpiezCaught => _terpiezCaught;
   DateTime get startDate => _startDate ?? DateTime.now();
   String get userId => _userId ?? Uuid().v4();
-  //Map<String, List<LatLng>> get terpiezMaster => _terpiezMaster;
+  Map<String, List<LatLng>> get terpiezMaster => terpiezIDLoc;
+  Set<String> get caughtLocationSet => caughtLocations;
 
   UserModel() {
     loadPreferences();
