@@ -194,6 +194,14 @@ class _ListTabState extends State<ListTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (terpiezIds.isEmpty) {
+      print('it is indeed empty');
+      return Center(child: Text("No Terpiez caught yet."));
+    }
+    if (loadedData.isEmpty) {
+      return Center(child: Text("No Terpiez caught yet."));
+    }
+
     return ListView.builder(
       itemCount: terpiezIds.length,
       itemBuilder: (context, index) {
@@ -538,7 +546,7 @@ class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProvider
                   child: FlutterMap(
                     options: MapOptions(
                       center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
-                      zoom: 13.0,
+                      zoom: 17.0,
                     ),
                     children: [
                       TileLayer(
