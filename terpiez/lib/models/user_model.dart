@@ -37,6 +37,7 @@ class UserModel with ChangeNotifier {
       if (jsonData != null  && jsonData != "{}") {
         updateTerpiezData(jsonData);
       }
+      _terpiezCaught = caughtLocationSet.length;
     } catch (e) {
       print('Error loading Terpiez data in UserModel: $e');
     }
