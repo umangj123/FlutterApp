@@ -140,29 +140,106 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
   }
 }
 
-class ListTab extends StatelessWidget {
+
+class ListTab extends StatefulWidget {
+  @override
+  _ListTabState createState() => _ListTabState();
+}
+
+class _ListTabState extends State<ListTab> {
+  List<String> terpiezIds = [];
+  Map<String, String> terpiezNames = {}; // Assumes names are stored or fetched separately if needed
+  Map<String, String> terpiezThumbnails = {};
+  List<Map<String, dynamic>> loadedData = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadTerpiezData();
+  }
+
+  void loadTerpiezData() async {
+    UserModel userModel = Provider.of<UserModel>(context, listen: false);
+    terpiezIds = userModel.terpiezMaster.keys.toList();
+    final directory = await getApplicationDocumentsDirectory();
+    
+
+      // Assuming names and thumbnail paths are managed somehow to be fetched here
+    for (String id in terpiezIds) {
+      // Assuming the thumbnail is named 'thumb_<id>.jpg' and stored locally
+      print(id);
+      String thumbnailPath = '${directory.path}/thumb_$id.jpg';
+      final filePath = '${directory.path}/terpiez_$id.json';
+      final file = File(filePath);
+
+      if (file.existsSync()) {
+        final data = jsonDecode(await file.readAsString());
+        loadedData.add({
+          'name': data['name'],
+          'thumbnailPath': thumbnailPath,
+          'description': data['description'],
+          'stats': data['stats'],
+          'imagePath': '${directory.path}/image_$id.jpg',
+          'locations': userModel.terpiezMaster[id]?.map((latlng) => latlng).toList() ?? [],
+        });
+      }
+    }
+    setState(() {
+      terpiezIds = userModel.terpiezMaster.keys.toList();
+      print('terpiezIds: $terpiezIds');
+    });
+
+    print('All data loaded: $loadedData');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final List<String> terpiezTypes = ['Terpiez Type 1', 'Terpiez Type 2', 'Terpiez Type 3'];
-
     return ListView.builder(
-      itemCount: terpiezTypes.length,
+      itemCount: terpiezIds.length,
       itemBuilder: (context, index) {
-        String terpiezType = terpiezTypes[index];
+        var terpiez = loadedData[index];
+        String thumbnailPath = terpiez['thumbnailPath'] ?? '';
+        String name = terpiez['name'] ?? 'Unknown';
+
         return ListTile(
-          leading: Hero(
-            tag: 'hero-$terpiezType',
-            child: Icon(Icons.pets),
-          ),
-          title: Text(terpiezType),
+          leading: thumbnailPath.isNotEmpty ? Hero(
+            tag: 'hero-$name',
+            child: Image.file(File(thumbnailPath), width: 50, height: 50, fit: BoxFit.cover),
+          ) : Icon(Icons.image_not_supported),
+          title: Text(name),
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => DetailsScreen(terpiezType: terpiezType)));
+            Navigator.push(context, MaterialPageRoute(builder: (context) => DetailsScreen(terpiezData: terpiez)));
           },
         );
       },
     );
   }
 }
+
+
+// class ListTab extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     final List<String> terpiezTypes = ['Terpiez Type 1', 'Terpiez Type 2', 'Terpiez Type 3'];
+
+//     return ListView.builder(
+//       itemCount: terpiezTypes.length,
+//       itemBuilder: (context, index) {
+//         String terpiezType = terpiezTypes[index];
+//         return ListTile(
+//           leading: Hero(
+//             tag: 'hero-$terpiezType',
+//             child: Icon(Icons.pets),
+//           ),
+//           title: Text(terpiezType),
+//           onTap: () {
+//             Navigator.push(context, MaterialPageRoute(builder: (context) => DetailsScreen(terpiezType: terpiezType)));
+//           },
+//         );
+//       },
+//     );
+//   }
+// }
 
 class FinderTab extends StatefulWidget {
   @override
@@ -322,7 +399,7 @@ void dispose() {
               mapController: mapController,
               options: MapOptions(
                 center: currentPosition,
-                zoom: 13.0,              
+                zoom: 16.0,              
               ),
               children: [
                 TileLayer(
@@ -391,9 +468,9 @@ class StatisticsTab extends StatelessWidget {
 }
 
 class DetailsScreen extends StatefulWidget {
-  final String terpiezType;
+  final Map<String, dynamic> terpiezData;
 
-  DetailsScreen({required this.terpiezType});
+  DetailsScreen({required this.terpiezData});
 
   @override
   _DetailsScreenState createState() => _DetailsScreenState();
@@ -418,47 +495,332 @@ class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProvider
   }
 
   @override
+  Widget build(BuildContext context) {
+    List<LatLng> locations = widget.terpiezData['locations'] ?? [];
+    String imagePath = widget.terpiezData['imagePath'] ?? '';
+    String name = widget.terpiezData['name'] ?? 'Unknown Terpiez';
+    String description = widget.terpiezData['description'] ?? 'No description available.';
+    String stats = widget.terpiezData['stats'].toString();
+
+    return Scaffold(
+      appBar: AppBar(title: Text(name)),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _animation,
+              builder: (context, child) {
+                return Container(
+                  color: _animation.value,
+                );
+              },
+            ),
+          ),
+          SingleChildScrollView(
+            child: Column(
+              children: [
+                SizedBox(height: 20),
+                Hero(
+                  tag: 'hero-$name',
+                  child: imagePath.isNotEmpty ? Image.file(File(imagePath), width: 200, height: 200) : Icon(Icons.image_not_supported, size: 200),
+                ),
+                SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(description, textAlign: TextAlign.justify),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text("Stats: $stats"),
+                ),
+                Container(
+                  height: 250,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
+                      zoom: 13.0,
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        subdomains: ['a', 'b', 'c']
+                      ),
+                      MarkerLayer(
+                        markers: locations.map((location) => Marker(
+                          point: location,
+                          child: Icon(Icons.location_on, color: Colors.red),
+                        )).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Details of ${widget.terpiezType}')),
-      body: SingleChildScrollView(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Hero(
-                tag: 'hero-${widget.terpiezType}',
-                child: Icon(Icons.pets, size: 100),
-              ),
-              SizedBox(height: 20),
-              Text(widget.terpiezType, style: Theme.of(context).textTheme.headline5),
-              SizedBox(height: 20),
-              AnimatedBuilder(
-                animation: _animation,
-                builder: (context, child) {
-                  return Container(
-                    width: MediaQuery.of(context).size.width,
-                    height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - MediaQuery.of(context).padding.top,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [_animation.value!, Colors.yellow],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
+
+
+
+// class DetailsScreen extends StatelessWidget {
+//   final Map<String, dynamic> terpiezData;
+
+//   DetailsScreen({required this.terpiezData});
+
+//   @override
+//   Widget build(BuildContext context) {
+//     List<LatLng> locations = terpiezData['locations'] ?? [];
+//     String imagePath = terpiezData['imagePath'] ?? '';
+//     String name = terpiezData['name'] ?? 'Unknown Terpiez';
+//     String description = terpiezData['description'] ?? 'No description available.';
+//     String stats = terpiezData['stats'].toString();
+
+//     return Scaffold(
+//       appBar: AppBar(title: Text(name)),
+//       body: SingleChildScrollView(
+//         child: Column(
+//           children: [
+//             imagePath.isNotEmpty
+//               ? Image.file(File(imagePath))
+//               : Padding(
+//                   padding: const EdgeInsets.all(8.0),
+//                   child: Text("No image available"),
+//                 ),
+//             Padding(
+//               padding: const EdgeInsets.all(8.0),
+//               child: Text(description, textAlign: TextAlign.justify),
+//             ),
+//             Padding(
+//               padding: const EdgeInsets.all(8.0),
+//               child: Text("Stats: $stats"),
+//             ),
+//             Container(
+//               height: 250,
+//               child: FlutterMap(
+//                 options: MapOptions(
+//                   center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
+//                   zoom: 13.0,
+//                 ),
+//                 children: [
+//                   TileLayer(
+//                     urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+//                     subdomains: ['a', 'b', 'c']
+//                   ),
+//                   MarkerLayer(
+//                     markers: locations.map((location) => Marker(
+//                       point: location,
+//                       child: Icon(Icons.location_on, color: Colors.red),
+//                     )).toList(),
+//                   ),
+//                 ],
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
+
+
+// class DetailsScreen extends StatefulWidget {
+//   final Map<String, dynamic> terpiezData;
+
+//   DetailsScreen({required this.terpiezData});
+
+//   @override
+//   _DetailsScreenState createState() => _DetailsScreenState();
+// }
+
+// class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProviderStateMixin {
+//   late AnimationController _controller;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     // Initialize the AnimationController
+//     _controller = AnimationController(
+//       duration: const Duration(seconds: 5),
+//       vsync: this,
+//     )..repeat();
+//   }
+
+//   @override
+//   void dispose() {
+//     // Dispose of the controller when the widget is removed from the widget tree
+//     _controller.dispose();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     print("Received terpiezData: $widget.terpiezData");
+//     print("Name: ${widget.terpiezData['name']}");
+//     print("Image Path: ${widget.terpiezData['imagePath']}");
+//     print("Description: ${widget.terpiezData['description']}");
+//     print("Stats: ${widget.terpiezData['stats']}");
+//     print("Locations: ${widget.terpiezData['locations']}");
+
+//     String imagePath = widget.terpiezData['imagePath'] ;
+//     var stats = widget.terpiezData['stats'] ;
+//     List<LatLng> locations = widget.terpiezData['locations'] ?? [];
+
+//     return Scaffold(
+//       appBar: AppBar(
+//         title: Text('Details of ${widget.terpiezData['name']}'),
+//       ),
+//       body: Stack(
+//         children: [
+//           AnimatedBuilder(
+//             animation: _controller,
+//             builder: (_, __) {
+//               return Container(
+//                 decoration: BoxDecoration(
+//                   gradient: LinearGradient(
+//                     begin: Alignment(-1.0 - _controller.value * 2, -1.0),
+//                     end: Alignment(1.0 + _controller.value * 2, 1.0),
+//                     colors: [Colors.blue, Colors.white, Colors.blue],
+//                     stops: [0.2, 0.5, 0.8],
+//                   ),
+//                 ),
+//               );
+//             },
+//           ),
+//           Positioned.fill(
+//             child:
+//           SingleChildScrollView(
+//             child: Column(
+//               crossAxisAlignment: CrossAxisAlignment.stretch,
+//               children: [
+//                 Hero(
+//                   tag: 'hero-${widget.terpiezData['name']}',  // Unique tag for Hero animation
+//                   child: Image.file(File(imagePath)),
+//                 ),
+//                 Padding(
+//                   padding: const EdgeInsets.all(8.0),
+//                   child: Text(widget.terpiezData['description'] ?? 'No description provided', style: Theme.of(context).textTheme.subtitle1),
+//                 ),
+//                 Padding(
+//                   padding: const EdgeInsets.all(8.0),
+//                   child: Text('Stats', style: Theme.of(context).textTheme.headline6),
+//                 ),
+//                 ...stats.entries.map((entry) => Padding(
+//                   padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+//                   child: Text('${entry.key}: ${entry.value}', style: Theme.of(context).textTheme.bodyText1),
+//                 )),
+//                 Padding(
+//                   padding: const EdgeInsets.symmetric(vertical: 20.0),
+//                   child: SizedBox(
+//                     height: 200,
+//                     child: FlutterMap(
+//                       options: MapOptions(
+//                         center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
+//                         zoom: 16.0,
+//                       ),
+//                       children: [
+//                         TileLayer(
+//                           urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+//                           subdomains: ['a', 'b', 'c'],
+//                         ),
+//                       MarkerLayer(
+//                         markers: locations.map((location) => Marker(
+//                       point: location,
+//                       child: Icon(Icons.location_on, color: Colors.red),
+//                         )).toList(),
+//                       )
+//                     ],
+//                     ),
+//                   ),
+//                 ),
+//               ],
+//             ),
+//           ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+
+// class DetailsScreen extends StatefulWidget {
+//   final String terpiezType;
+
+//   DetailsScreen({required this.terpiezType});
+
+//   @override
+//   _DetailsScreenState createState() => _DetailsScreenState();
+// }
+
+// class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProviderStateMixin {
+//   late AnimationController _controller;
+//   late Animation<Color?> _animation;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _controller = AnimationController(
+//       duration: const Duration(seconds: 3),
+//       vsync: this,
+//     )..repeat(reverse: true);
+
+//     _animation = ColorTween(
+//       begin: Colors.blue,
+//       end: Colors.red,
+//     ).animate(_controller);
+//   }
+
+//   @override
+//   void dispose() {
+//     _controller.dispose();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: Text('Details of ${widget.terpiezType}')),
+//       body: SingleChildScrollView(
+//         child: Center(
+//           child: Column(
+//             mainAxisAlignment: MainAxisAlignment.center,
+//             children: [
+//               Hero(
+//                 tag: 'hero-${widget.terpiezType}',
+//                 child: Icon(Icons.pets, size: 100),
+//               ),
+//               SizedBox(height: 20),
+//               Text(widget.terpiezType, style: Theme.of(context).textTheme.headline5),
+//               SizedBox(height: 20),
+//               AnimatedBuilder(
+//                 animation: _animation,
+//                 builder: (context, child) {
+//                   return Container(
+//                     width: MediaQuery.of(context).size.width,
+//                     height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - MediaQuery.of(context).padding.top,
+//                     decoration: BoxDecoration(
+//                       gradient: LinearGradient(
+//                         begin: Alignment.topLeft,
+//                         end: Alignment.bottomRight,
+//                         colors: [_animation.value!, Colors.yellow],
+//                       ),
+//                     ),
+//                   );
+//                 },
+//               ),
+//             ],
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
