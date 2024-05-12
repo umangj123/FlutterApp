@@ -116,6 +116,9 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    UserModel userModel = Provider.of<UserModel>(context, listen: false);
+    userModel.loadUserTerpiezData();
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Terpiez Game'),

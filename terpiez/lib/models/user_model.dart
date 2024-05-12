@@ -1,7 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:terpiez/redis_service.dart';
+
+
 
 class UserModel with ChangeNotifier {
   int _terpiezCaught = 0;
@@ -9,6 +14,8 @@ class UserModel with ChangeNotifier {
   String? _userId;
   Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
   Map<String, List<LatLng>> terpiezIDLoc = {};
+  RedisService redisService = RedisService();
+
   //Map<String, List<LatLng>> _terpiezMaster = {}; 
 
   int get terpiezCaught => _terpiezCaught;
@@ -19,10 +26,50 @@ class UserModel with ChangeNotifier {
 
   UserModel() {
     loadPreferences();
+    //savePreferences();
   }
 
-  void incrementTerpiez() {
+  Future<void> loadUserTerpiezData() async {
+    try {
+      await loadPreferences();
+      var jsonData = await redisService.fetchUserTerpiez(userId);
+      print('To update we got: $jsonData');
+      if (jsonData != null  && jsonData != "{}") {
+        updateTerpiezData(jsonData);
+      }
+    } catch (e) {
+      print('Error loading Terpiez data in UserModel: $e');
+    }
+}
+
+
+  void updateTerpiezData(Map<String, dynamic> jsonData) {
+    //Map<String, dynamic> data = jsonDecode(jsonData);
+    terpiezIDLoc.clear();
+    caughtLocations.clear();
+
+    jsonData.forEach((terpiezId, locationsJson) {
+        List<LatLng> locations = (locationsJson as List).map((locationMap) {
+            // Extract coordinates, noting that the array has longitude first, latitude second
+            double lon = locationMap['coordinates'][0];
+            double lat = locationMap['coordinates'][1];
+            // Add to caughtLocations with latitude first
+            caughtLocations.add("$lat,$lon");
+            return LatLng(lat, lon);
+        }).toList();
+        // Update the map with the new list of LatLng objects
+        terpiezIDLoc[terpiezId] = locations;
+    });
+    print('Updated Terpiez data: $terpiezIDLoc');
+    print('Updated caught locations: $caughtLocations');
+    notifyListeners();  // Notify all listening widgets of data change
+}
+
+
+  void incrementTerpiez() async {
     _terpiezCaught++;
+    await redisService.saveUserTerpiez(userId, terpiezMaster);
+    print('incrementTerpiez with userId: $userId');
     notifyListeners();
     savePreferences();
   }

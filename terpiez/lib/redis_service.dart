@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:redis/redis.dart';
 
 
@@ -83,6 +84,78 @@ class RedisService {
       }
     return null;
   }
+
+  // Future<void> saveTerpiezMasterData(Map<String, List<LatLng>> terpiezMaster, String username, String userId) async {
+  //   String username = await _storage.read(key: 'username') ?? "";
+  //   String password = await _storage.read(key: 'password') ?? "";
+  //   String path = ".$userId";  // The path targets the specific UUID
+  //   var jsonData = terpiezMaster.map((id, locations) {
+  //     return MapEntry(id, locations.map((location) => {'lat': location.latitude, 'lon': location.longitude}).toList());
+  //   });
+
+  //   try {
+  //     // Convert the map data to a JSON string
+  //     String jsonString = jsonEncode(jsonData);
+  //     await connect(username, password); // Ensure connection is established
+  //     // Directly set (overwrite) the data at the specific path
+  //     await _command?.send_object(['JSON.SET', username, path, jsonString]);
+  //     await disconnect();
+  //     print('Data overwritten for UUID: $userId under key: $username');
+  //   } catch (e) {
+  //     print('Error saving data to Redis: $e');
+  //   }
+  // }
+
+  Future<void> saveUserTerpiez(String userId, Map<String, List<LatLng>> terpiez) async {
+    String username = await _storage.read(key: 'username') ?? "defaultUsername";
+    
+    try{
+      await connect(username, await _storage.read(key: 'password') ?? "");
+
+      String key = username;  // Use the username as the top-level key
+      //String jsonData = jsonEncode({userId: terpiez});  // Create a JSON object with the UUID as key
+
+    // Retrieve the existing data for the user
+      var existingData = await _command!.send_object(['JSON.GET', key]);
+      Map<String, dynamic> data;
+      if (existingData != null) {
+        data = jsonDecode(existingData);
+      // Update or add the new UUID and its Terpiez IDs
+        data[userId] = terpiez;
+      } else {
+      // If no existing data, initialize with the current UUID and Terpiez IDs
+        data = {userId: terpiez};
+      }
+      String updatedJsonData = jsonEncode(data);
+      await _command!.send_object(['JSON.SET', key, '.', updatedJsonData]);
+      await disconnect();
+      print('Saved user Terpiez data for user ID: $userId under username: $username');
+    } catch (e) {
+      print('Error saving user Terpiez data: $e');
+      await disconnect();
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchUserTerpiez(String userId) async {
+    String username = await _storage.read(key: 'username') ?? "defaultUsername";
+    String password= await _storage.read(key: 'password') ?? "defaultPassword";
+    try {
+      await connect(username, password);
+      var response = await _command!.send_object(['JSON.GET', username, '.$userId']);
+      if (response != null) {
+        response = jsonDecode(response);
+        print('Downloaded user Terpiez data: $response');
+        await disconnect();
+        return response;
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching user Terpiez data: $e');
+      await disconnect();
+      return null;
+    }
+  }
+
 
 
 
