@@ -13,6 +13,9 @@ import 'package:flutter_map_location_marker/flutter_map_location_marker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'redis_service.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+
+
 
 
 
@@ -271,12 +274,14 @@ class _FinderTabState extends State<FinderTab> {
 
 
   StreamSubscription<Position>? positionStreamSubscription; // Declare the subscription variable
+  StreamSubscription<AccelerometerEvent>? accelerometerSubscription;
 
 
   @override
   void initState() {
     super.initState();
     _initializeLocation();
+    _initializeAccelerometer();
   }
 
 void _initializeLocation() async {
@@ -295,6 +300,20 @@ void _initializeLocation() async {
     }
   });
 }
+
+void _initializeAccelerometer() {
+    accelerometerSubscription = SensorsPlatform.instance.accelerometerEvents.listen((AccelerometerEvent event) {
+      // Check if the device was moved sharply
+      if (event.x.abs() > 10 || event.y.abs() > 10 || event.z.abs() > 10) {
+        if (closestDistance <= 10) {
+          Provider.of<UserModel>(context, listen: false).incrementTerpiez();
+          handleNewCatch(closestID);
+          markTerpiezAsCaught(closestTerpLocation, closestID);
+        }
+      }
+    });
+  }
+
 
 void _updateMapMarkers() async {
     double closest = double.infinity;
@@ -369,13 +388,18 @@ void _updateMapMarkers() async {
         print('Images saved locally');
       }
       await saveTerpiezDataLocally(terpiezId, terpiezData);
-      await _showCatchDialog(terpiezData['name'], imageKey);
+      final directory = await getApplicationDocumentsDirectory();
+      String imagePath = '${directory.path}/image_$terpiezId.jpg';
+
+      await _showCatchDialog(terpiezData['name'], imagePath );
       print('handleNewCatch completed');
     }
 
   }
 
   Future<void> _showCatchDialog(String name, String image) async {
+    final directory = await getApplicationDocumentsDirectory();
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -386,7 +410,7 @@ void _updateMapMarkers() async {
               children: <Widget>[
                 Text(name),
                 SizedBox(height: 10),
-                Image.memory(base64Decode(image)),  // Assuming 'image' field is base64 encoded string
+                Image.file(File(image)),  // Assuming 'image' field is base64 encoded string
               ],
             ),
           ),
@@ -423,6 +447,7 @@ void _updateMapMarkers() async {
 @override
 void dispose() {
   positionStreamSubscription?.cancel();  // Cancel the subscription
+  accelerometerSubscription?.cancel();
   redisService.disconnect();
   super.dispose();
 }
@@ -458,22 +483,26 @@ void dispose() {
               children: [
                 Text('Closest Terpiez: ${closestDistance.toStringAsFixed(2)} m'),
                 SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: closestDistance <= 10 ? () {
-                    Provider.of<UserModel>(context, listen: false).incrementTerpiez();
-                    handleNewCatch(closestID);
-                    markTerpiezAsCaught(closestTerpLocation, closestID);
-                  } : null,
-                  child: Text('Catch Terpiez'),
-                  style: ButtonStyle(
-                    backgroundColor: MaterialStateProperty.resolveWith<Color>(
-                      (Set<MaterialState> states) {
-                        if (states.contains(MaterialState.disabled)) return Colors.grey;
-                        return Colors.green; // Use the component's default.
-                      },
-                    ),
-                  ),
-                ),
+                closestDistance <= 10
+                  ? Icon(Icons.notification_important, color: Colors.red, size: 30)
+                  : SizedBox.shrink(),
+
+                // ElevatedButton(
+                //   onPressed: closestDistance <= 10 ? () {
+                //     Provider.of<UserModel>(context, listen: false).incrementTerpiez();
+                //     handleNewCatch(closestID);
+                //     markTerpiezAsCaught(closestTerpLocation, closestID);
+                //   } : null,
+                //   child: Text('Catch Terpiez'),
+                //   style: ButtonStyle(
+                //     backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                //       (Set<MaterialState> states) {
+                //         if (states.contains(MaterialState.disabled)) return Colors.grey;
+                //         return Colors.green; // Use the component's default.
+                //       },
+                //     ),
+                //   ),
+                // ),
               ],
             ),
           ),
