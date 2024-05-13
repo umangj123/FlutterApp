@@ -369,11 +369,40 @@ void _updateMapMarkers() async {
         print('Images saved locally');
       }
       await saveTerpiezDataLocally(terpiezId, terpiezData);
+      await _showCatchDialog(terpiezData['name'], imageKey);
       print('handleNewCatch completed');
     }
 
   }
 
+  Future<void> _showCatchDialog(String name, String image) async {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Caught a Terpiez!'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Text(name),
+                SizedBox(height: 10),
+                Image.memory(base64Decode(image)),  // Assuming 'image' field is base64 encoded string
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Dismiss'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
   Future<void> saveImageLocally(String base64Data, String filename) async {
     var bytes = base64Decode(base64Data);
     String dir = (await getApplicationDocumentsDirectory()).path;
@@ -580,258 +609,3 @@ class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProvider
   }
 }
 
-
-
-// class DetailsScreen extends StatelessWidget {
-//   final Map<String, dynamic> terpiezData;
-
-//   DetailsScreen({required this.terpiezData});
-
-//   @override
-//   Widget build(BuildContext context) {
-//     List<LatLng> locations = terpiezData['locations'] ?? [];
-//     String imagePath = terpiezData['imagePath'] ?? '';
-//     String name = terpiezData['name'] ?? 'Unknown Terpiez';
-//     String description = terpiezData['description'] ?? 'No description available.';
-//     String stats = terpiezData['stats'].toString();
-
-//     return Scaffold(
-//       appBar: AppBar(title: Text(name)),
-//       body: SingleChildScrollView(
-//         child: Column(
-//           children: [
-//             imagePath.isNotEmpty
-//               ? Image.file(File(imagePath))
-//               : Padding(
-//                   padding: const EdgeInsets.all(8.0),
-//                   child: Text("No image available"),
-//                 ),
-//             Padding(
-//               padding: const EdgeInsets.all(8.0),
-//               child: Text(description, textAlign: TextAlign.justify),
-//             ),
-//             Padding(
-//               padding: const EdgeInsets.all(8.0),
-//               child: Text("Stats: $stats"),
-//             ),
-//             Container(
-//               height: 250,
-//               child: FlutterMap(
-//                 options: MapOptions(
-//                   center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
-//                   zoom: 13.0,
-//                 ),
-//                 children: [
-//                   TileLayer(
-//                     urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-//                     subdomains: ['a', 'b', 'c']
-//                   ),
-//                   MarkerLayer(
-//                     markers: locations.map((location) => Marker(
-//                       point: location,
-//                       child: Icon(Icons.location_on, color: Colors.red),
-//                     )).toList(),
-//                   ),
-//                 ],
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-
-// class DetailsScreen extends StatefulWidget {
-//   final Map<String, dynamic> terpiezData;
-
-//   DetailsScreen({required this.terpiezData});
-
-//   @override
-//   _DetailsScreenState createState() => _DetailsScreenState();
-// }
-
-// class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProviderStateMixin {
-//   late AnimationController _controller;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     // Initialize the AnimationController
-//     _controller = AnimationController(
-//       duration: const Duration(seconds: 5),
-//       vsync: this,
-//     )..repeat();
-//   }
-
-//   @override
-//   void dispose() {
-//     // Dispose of the controller when the widget is removed from the widget tree
-//     _controller.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     print("Received terpiezData: $widget.terpiezData");
-//     print("Name: ${widget.terpiezData['name']}");
-//     print("Image Path: ${widget.terpiezData['imagePath']}");
-//     print("Description: ${widget.terpiezData['description']}");
-//     print("Stats: ${widget.terpiezData['stats']}");
-//     print("Locations: ${widget.terpiezData['locations']}");
-
-//     String imagePath = widget.terpiezData['imagePath'] ;
-//     var stats = widget.terpiezData['stats'] ;
-//     List<LatLng> locations = widget.terpiezData['locations'] ?? [];
-
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text('Details of ${widget.terpiezData['name']}'),
-//       ),
-//       body: Stack(
-//         children: [
-//           AnimatedBuilder(
-//             animation: _controller,
-//             builder: (_, __) {
-//               return Container(
-//                 decoration: BoxDecoration(
-//                   gradient: LinearGradient(
-//                     begin: Alignment(-1.0 - _controller.value * 2, -1.0),
-//                     end: Alignment(1.0 + _controller.value * 2, 1.0),
-//                     colors: [Colors.blue, Colors.white, Colors.blue],
-//                     stops: [0.2, 0.5, 0.8],
-//                   ),
-//                 ),
-//               );
-//             },
-//           ),
-//           Positioned.fill(
-//             child:
-//           SingleChildScrollView(
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.stretch,
-//               children: [
-//                 Hero(
-//                   tag: 'hero-${widget.terpiezData['name']}',  // Unique tag for Hero animation
-//                   child: Image.file(File(imagePath)),
-//                 ),
-//                 Padding(
-//                   padding: const EdgeInsets.all(8.0),
-//                   child: Text(widget.terpiezData['description'] ?? 'No description provided', style: Theme.of(context).textTheme.subtitle1),
-//                 ),
-//                 Padding(
-//                   padding: const EdgeInsets.all(8.0),
-//                   child: Text('Stats', style: Theme.of(context).textTheme.headline6),
-//                 ),
-//                 ...stats.entries.map((entry) => Padding(
-//                   padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-//                   child: Text('${entry.key}: ${entry.value}', style: Theme.of(context).textTheme.bodyText1),
-//                 )),
-//                 Padding(
-//                   padding: const EdgeInsets.symmetric(vertical: 20.0),
-//                   child: SizedBox(
-//                     height: 200,
-//                     child: FlutterMap(
-//                       options: MapOptions(
-//                         center: locations.isNotEmpty ? locations.first : LatLng(0, 0),
-//                         zoom: 16.0,
-//                       ),
-//                       children: [
-//                         TileLayer(
-//                           urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-//                           subdomains: ['a', 'b', 'c'],
-//                         ),
-//                       MarkerLayer(
-//                         markers: locations.map((location) => Marker(
-//                       point: location,
-//                       child: Icon(Icons.location_on, color: Colors.red),
-//                         )).toList(),
-//                       )
-//                     ],
-//                     ),
-//                   ),
-//                 ),
-//               ],
-//             ),
-//           ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
-
-// class DetailsScreen extends StatefulWidget {
-//   final String terpiezType;
-
-//   DetailsScreen({required this.terpiezType});
-
-//   @override
-//   _DetailsScreenState createState() => _DetailsScreenState();
-// }
-
-// class _DetailsScreenState extends State<DetailsScreen> with SingleTickerProviderStateMixin {
-//   late AnimationController _controller;
-//   late Animation<Color?> _animation;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _controller = AnimationController(
-//       duration: const Duration(seconds: 3),
-//       vsync: this,
-//     )..repeat(reverse: true);
-
-//     _animation = ColorTween(
-//       begin: Colors.blue,
-//       end: Colors.red,
-//     ).animate(_controller);
-//   }
-
-//   @override
-//   void dispose() {
-//     _controller.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: Text('Details of ${widget.terpiezType}')),
-//       body: SingleChildScrollView(
-//         child: Center(
-//           child: Column(
-//             mainAxisAlignment: MainAxisAlignment.center,
-//             children: [
-//               Hero(
-//                 tag: 'hero-${widget.terpiezType}',
-//                 child: Icon(Icons.pets, size: 100),
-//               ),
-//               SizedBox(height: 20),
-//               Text(widget.terpiezType, style: Theme.of(context).textTheme.headline5),
-//               SizedBox(height: 20),
-//               AnimatedBuilder(
-//                 animation: _animation,
-//                 builder: (context, child) {
-//                   return Container(
-//                     width: MediaQuery.of(context).size.width,
-//                     height: MediaQuery.of(context).size.height - AppBar().preferredSize.height - MediaQuery.of(context).padding.top,
-//                     decoration: BoxDecoration(
-//                       gradient: LinearGradient(
-//                         begin: Alignment.topLeft,
-//                         end: Alignment.bottomRight,
-//                         colors: [_animation.value!, Colors.yellow],
-//                       ),
-//                     ),
-//                   );
-//                 },
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
