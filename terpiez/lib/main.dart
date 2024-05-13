@@ -14,15 +14,20 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'redis_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:terpiez/global.dart';
 
 
 
 
 
 void main() {
+  final redisService = RedisService();
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => UserModel(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => UserModel()),
+        Provider<RedisService>.value(value: redisService),  // Provide RedisService
+      ],
       child: MyApp(),
     ),
   );
@@ -32,6 +37,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Terpiez Game',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -110,11 +116,15 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  //late RedisService _redisService = RedisService();
+  late RedisService redisService = Provider.of<RedisService>(context, listen: false);
+  
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    redisService.startMonitoringConnection();
   }
 
   @override
@@ -268,7 +278,8 @@ class _FinderTabState extends State<FinderTab> {
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
   List<Map<String, dynamic>> alllocations = []; 
-  RedisService redisService = RedisService();
+  late RedisService redisService = Provider.of<RedisService>(context, listen: false);
+  //RedisService redisService = RedisService();
   String closestID = "";
   LatLng closestTerpLocation = LatLng(0,0);
 
@@ -318,26 +329,28 @@ void _initializeAccelerometer() {
 void _updateMapMarkers() async {
     double closest = double.infinity;
     Marker? closestMarker;
-
-    for (var location in alllocations) {
-      String locationKey = "${location['lat']},${location['lon']}";
-      if (!Provider.of<UserModel>(context, listen: false).caughtLocationSet.contains(locationKey)) {
-        double distance = Geolocator.distanceBetween(
-          currentPosition.latitude, currentPosition.longitude,
-          location['lat'], location['lon']
-        );
-        if (distance < closest) {
-          closest = distance;
-          closestID = location['id'];
-          closestTerpLocation = LatLng(location['lat'], location['lon']);
-          closestMarker = Marker(
-            point: LatLng(location['lat'], location['lon']),
-            child: Icon(Icons.location_on, color: Colors.red, size:30),
+    if (redisService.isConnected){
+      print(redisService.isConnected);
+      for (var location in alllocations) {
+        String locationKey = "${location['lat']},${location['lon']}";
+        if (!Provider.of<UserModel>(context, listen: false).caughtLocationSet.contains(locationKey)) {
+          double distance = Geolocator.distanceBetween(
+            currentPosition.latitude, currentPosition.longitude,
+            location['lat'], location['lon']
           );
+          if (distance < closest) {
+            closest = distance;
+            closestID = location['id'];
+            closestTerpLocation = LatLng(location['lat'], location['lon']);
+            closestMarker = Marker(
+              point: LatLng(location['lat'], location['lon']),
+              child: Icon(Icons.location_on, color: Colors.red, size:30),
+            );
+          }
         }
       }
     }
-    print("closestID: $closestID");
+    //print("closestID: $closestID");
     if (closestMarker != null) {
       closestDistance = closest;
       setState(() {
@@ -347,6 +360,7 @@ void _updateMapMarkers() async {
     else {
       setState(() {
         terpiezMarkers = [];
+        closestDistance = double.infinity;
       });
     }
   }

@@ -16,6 +16,7 @@ class UserModel with ChangeNotifier {
   Map<String, List<LatLng>> terpiezIDLoc = {};
   RedisService redisService = RedisService();
 
+
   //Map<String, List<LatLng>> _terpiezMaster = {}; 
 
   int get terpiezCaught => _terpiezCaught;
