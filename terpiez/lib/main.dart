@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/user_model.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -15,9 +17,6 @@ import 'redis_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:terpiez/global.dart';
-
-
-
 
 
 void main() {
@@ -36,15 +35,65 @@ void main() {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'Terpiez Game',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
-      home: LoginPage(),
+    return FutureBuilder<bool>(
+      future: _checkLoggedInStatus(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircularProgressIndicator();
+        } else if (snapshot.hasError) {
+          return MaterialApp(
+            title: 'Terpiez Game',
+            theme: ThemeData(
+              primarySwatch: Colors.blue,
+            ),
+            home: LoginPage(),
+          );
+        } else {
+          if (snapshot.data == true) {
+            return ChangeNotifierProvider(
+              create: (context) => UserModel(),
+              child: MaterialApp(
+                title: 'Terpiez Game',
+                theme: ThemeData(
+                  primarySwatch: Colors.blue,
+                ),
+                home: MyHomePage(),
+              ),
+            );
+          } else {
+            return ChangeNotifierProvider(
+              create: (context) => UserModel(),
+              child: MaterialApp(
+                navigatorKey: navigatorKey,
+                title: 'Terpiez Game',
+                theme: ThemeData(
+                  primarySwatch: Colors.blue,
+                ),
+                home: LoginPage(),
+              ),
+            );
+          }
+        }
+      },
     );
   }
+
+Future<bool> _checkLoggedInStatus() async {
+  final prefs = await SharedPreferences.getInstance();
+  bool isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+
+  if (isLoggedIn) {
+    final storage = FlutterSecureStorage();
+    String? username = await storage.read(key: 'username');
+    String? password = await storage.read(key: 'password');
+    if (username != null && password != null) {
+      final redisService = RedisService();
+      return await redisService.connect(username, password);
+    }
+  }
+  return false;
+}
+
 }
 
 
@@ -69,6 +118,10 @@ class _LoginPageState extends State<LoginPage> {
     bool connected = await _redisService.connect(_usernameController.text, _passwordController.text);
     setState(() => _loading = false);
     if (connected) {
+      // Save login status
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', true);
+
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => MyHomePage()));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to connect to Redis')));
@@ -106,7 +159,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
 
 
 class MyHomePage extends StatefulWidget {
@@ -293,6 +345,7 @@ void _initializeAccelerometer() {
       // Check if the device was moved sharply
       if (event.x.abs() > 10 || event.y.abs() > 10 || event.z.abs() > 10) {
         if (closestDistance <= 10) {
+          playSound('sounds/catch.wav');
           Provider.of<UserModel>(context, listen: false).incrementTerpiez();
           handleNewCatch(closestID);
           markTerpiezAsCaught(closestTerpLocation, closestID);
@@ -301,6 +354,10 @@ void _initializeAccelerometer() {
     });
   }
 
+void playSound(String soundFile) async {
+  final player = AudioPlayer();
+  await player.play(AssetSource(soundFile));
+}
 
 void _updateMapMarkers() async {
     double closest = double.infinity;
@@ -333,6 +390,9 @@ void _updateMapMarkers() async {
     //}
     //print("closestID: $closestID");
     if (closestMarker != null) {
+      if (closest <= 20) {
+        playSound('sounds/notification.wav');
+      }
       closestDistance = closest;
       setState(() {
         terpiezMarkers = [closestMarker!];
