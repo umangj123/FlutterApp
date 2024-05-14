@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -17,10 +18,20 @@ import 'redis_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:terpiez/global.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+
+final FlutterSecureStorage _storage = const FlutterSecureStorage();
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 
-void main() {
+void main() async {
   //final redisService = RedisService();
+  WidgetsFlutterBinding.ensureInitialized();
+  await requestPermissions();
+  await initializeNotifications();
+  await initializeService();
   runApp(
     MultiProvider(
       providers: [
@@ -31,6 +42,123 @@ void main() {
     ),
   );
 }
+
+Future<void> requestPermissions() async {
+  await [
+    Permission.locationAlways,
+    Permission.notification,
+  ].request();
+}
+
+Future<void> initializeNotifications() async {
+  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse notificationResponse) async {
+      String? payload = notificationResponse.payload;
+      if (payload != null) {
+        handleNotificationNavigation(payload);
+      }
+    },
+  );
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel', // id
+    'High Importance Notifications', // name // description
+    importance: Importance.max,
+  );
+
+  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+
+  final NotificationAppLaunchDetails? notificationAppLaunchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+  if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
+    // Handle notification launch
+    handleNotificationNavigation(notificationAppLaunchDetails!.notificationResponse?.payload ?? '');
+  }
+}
+
+void handleNotificationNavigation(String payload) {
+  if (navigatorKey.currentState != null) {
+    if (payload == 'proximity_alert') {
+      navigatorKey.currentState!.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => MyHomePage(initialTab: 1)),
+        (Route<dynamic> route) => false,
+      );
+    }
+  }
+}
+
+Future<void> initializeService() async {
+  final service = FlutterBackgroundService();
+  await service.configure(
+    androidConfiguration: AndroidConfiguration(
+      onStart: onStart,
+      isForegroundMode: true,
+      autoStart: true,
+      notificationChannelId: 'high_importance_channel',
+      initialNotificationTitle: 'Terpiez Service',
+      initialNotificationContent: 'Monitoring your proximity to Terpiez.',
+      foregroundServiceNotificationId: 888,
+    ),
+    iosConfiguration: IosConfiguration(
+      onForeground: onStart,
+      autoStart: true,
+    ),
+  );
+
+  await service.startService();
+}
+
+void onStart(ServiceInstance service) async {
+  DartPluginRegistrant.ensureInitialized();
+
+  // Your periodic task to check proximity
+  Timer.periodic(const Duration(seconds: 15), (timer) async {
+    if (service is AndroidServiceInstance) {
+      if (await service.isForegroundService()) {
+        Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+        LatLng currentPosition = LatLng(position.latitude, position.longitude);
+
+        final RedisService redisService = RedisService();
+        await redisService.connect(await _storage.read(key: 'username') ?? "", await _storage.read(key: 'password') ?? "");
+        List<Map<String, dynamic>> terpiezLocations = await redisService.fetchAllLocations();
+        await redisService.disconnect();
+
+        for (var location in terpiezLocations) {
+          double distance = Geolocator.distanceBetween(
+            currentPosition.latitude, currentPosition.longitude,
+            location['lat'], location['lon'],
+          );
+          if (distance <= 20) {
+            print('trying to show Proximity alert: $distance');
+            await showProximityNotification();
+            break;
+          }
+        }
+      }
+    }
+  });
+}
+
+Future<void> showProximityNotification() async {
+  print('showing proximity notification');
+  const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+    'high_importance_channel', 'High Importance Notifications',
+    importance: Importance.max,
+    priority: Priority.high,
+    sound: RawResourceAndroidNotificationSound('proximity_alert'),
+  );
+  const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+  await flutterLocalNotificationsPlugin.show(
+    0,
+    'Terpiez Nearby!',
+    'You are within 20m of a Terpiez. Open the app to catch it!',
+    platformChannelSpecifics,
+    payload: 'proximity_alert',
+  );
+}
+
 
 class MyApp extends StatelessWidget {
   @override
@@ -162,20 +290,24 @@ class _LoginPageState extends State<LoginPage> {
 
 
 class MyHomePage extends StatefulWidget {
+  final int initialTab;
+
+  MyHomePage({this.initialTab = 0});
+
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late RedisService _redisService = RedisService();
-  //late RedisService redisService = Provider.of<RedisService>(context, listen: false);
-  
+  late RedisService _redisService;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.index = widget.initialTab;
+    _redisService = RedisService();
     _redisService.startMonitoringConnection();
   }
 
@@ -196,6 +328,44 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
           ],
         ),
       ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.blue,
+              ),
+              child: Text(
+                'Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.music_note),
+              title: Text('Play Sound'),
+              trailing: Consumer<UserModel>(
+                builder: (context, userModel, child) {
+                  return Switch(
+                    value: userModel.playSound,
+                    onChanged: (value) {
+                      userModel.togglePlaySound(value);
+                    },
+                  );
+                },
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.delete),
+              title: Text('Clear Data'),
+              onTap: () => _confirmClearData(context),
+            ),
+          ],
+        ),
+      ),
       body: TabBarView(
         controller: _tabController,
         children: [
@@ -205,6 +375,41 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         ],
       ),
     );
+  }
+
+  void _confirmClearData(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Confirm Clear Data'),
+          content: Text('Are you sure you want to clear all data? This action cannot be undone.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: Text('Clear Data'),
+              onPressed: () async {
+                await _clearData();
+                Navigator.of(context).pop();
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (context) => MyHomePage()),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _clearData() async {
+    UserModel userModel = Provider.of<UserModel>(context, listen: false);
+    await userModel.clearData();
   }
 }
 
@@ -355,8 +560,11 @@ void _initializeAccelerometer() {
   }
 
 void playSound(String soundFile) async {
-  final player = AudioPlayer();
-  await player.play(AssetSource(soundFile));
+  final userModel = Provider.of<UserModel>(context, listen: false);
+  if (userModel.playSound) {
+    final player = AudioPlayer();
+    await player.play(AssetSource(soundFile));
+  }
 }
 
 void _updateMapMarkers() async {

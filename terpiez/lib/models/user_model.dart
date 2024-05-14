@@ -11,6 +11,7 @@ import 'package:terpiez/redis_service.dart';
 class UserModel with ChangeNotifier {
   int _terpiezCaught = 0;
   DateTime? _startDate;
+  bool _playSound = true; // Default to playing sound
   String? _userId;
   Set<String> caughtLocations = Set<String>(); // To store caught locations as "lat,lon"
   Map<String, List<LatLng>> terpiezIDLoc = {};
@@ -24,10 +25,19 @@ class UserModel with ChangeNotifier {
   String get userId => _userId ?? Uuid().v4();
   Map<String, List<LatLng>> get terpiezMaster => terpiezIDLoc;
   Set<String> get caughtLocationSet => caughtLocations;
+  bool get playSound => _playSound;
+
 
   UserModel() {
     loadPreferences();
     //savePreferences();
+  }
+
+
+  void togglePlaySound(bool value) {
+    _playSound = value;
+    savePreferences();
+    notifyListeners();
   }
 
   Future<void> loadUserTerpiezData() async {
@@ -87,6 +97,7 @@ class UserModel with ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     _userId = prefs.getString('userId');
     String? storedDate = prefs.getString('startDate');
+    _playSound = prefs.getBool('playSound') ?? true;
     if (storedDate != null) {
       _startDate = DateTime.parse(storedDate);
     } else {
@@ -113,6 +124,19 @@ class UserModel with ChangeNotifier {
     if (_startDate != null) {
       await prefs.setString('startDate', _startDate!.toIso8601String());
     }
+    await prefs.setBool('playSound', _playSound);
+  }
+
+   Future<void> clearData() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+    _userId = Uuid().v4();
+    _startDate = DateTime.now();
+    _terpiezCaught = 0;
+    caughtLocations.clear();
+    terpiezIDLoc.clear();
+    notifyListeners();
+    savePreferences();
   }
 }
 
