@@ -106,7 +106,7 @@ class UserModel with ChangeNotifier {
 
   Future<void> savePreferences() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('terpiezCaught', _terpiezCaught);
+    await prefs.setInt('terpiezCaught', 0);
     if (_userId != null) {
       await prefs.setString('userId', _userId!);
     }

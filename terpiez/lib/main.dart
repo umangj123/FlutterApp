@@ -21,12 +21,12 @@ import 'package:terpiez/global.dart';
 
 
 void main() {
-  final redisService = RedisService();
+  //final redisService = RedisService();
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => UserModel()),
-        Provider<RedisService>.value(value: redisService),  // Provide RedisService
+        //Provider<RedisService>.value(value: redisService),  // Provide RedisService
       ],
       child: MyApp(),
     ),
@@ -116,15 +116,15 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  //late RedisService _redisService = RedisService();
-  late RedisService redisService = Provider.of<RedisService>(context, listen: false);
+  late RedisService _redisService = RedisService();
+  //late RedisService redisService = Provider.of<RedisService>(context, listen: false);
   
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    redisService.startMonitoringConnection();
+    _redisService.startMonitoringConnection();
   }
 
   @override
@@ -240,31 +240,6 @@ class _ListTabState extends State<ListTab> {
   }
 }
 
-
-// class ListTab extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     final List<String> terpiezTypes = ['Terpiez Type 1', 'Terpiez Type 2', 'Terpiez Type 3'];
-
-//     return ListView.builder(
-//       itemCount: terpiezTypes.length,
-//       itemBuilder: (context, index) {
-//         String terpiezType = terpiezTypes[index];
-//         return ListTile(
-//           leading: Hero(
-//             tag: 'hero-$terpiezType',
-//             child: Icon(Icons.pets),
-//           ),
-//           title: Text(terpiezType),
-//           onTap: () {
-//             Navigator.push(context, MaterialPageRoute(builder: (context) => DetailsScreen(terpiezType: terpiezType)));
-//           },
-//         );
-//       },
-//     );
-//   }
-// }
-
 class FinderTab extends StatefulWidget {
   @override
   _FinderTabState createState() => _FinderTabState();
@@ -278,10 +253,11 @@ class _FinderTabState extends State<FinderTab> {
   List<Marker> terpiezMarkers = [];
   double closestDistance = double.infinity;
   List<Map<String, dynamic>> alllocations = []; 
-  late RedisService redisService = Provider.of<RedisService>(context, listen: false);
-  //RedisService redisService = RedisService();
+  //late RedisService redisService = Provider.of<RedisService>(context, listen: false);
+  RedisService redisService = RedisService();
   String closestID = "";
   LatLng closestTerpLocation = LatLng(0,0);
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
 
   StreamSubscription<Position>? positionStreamSubscription; // Declare the subscription variable
@@ -329,7 +305,12 @@ void _initializeAccelerometer() {
 void _updateMapMarkers() async {
     double closest = double.infinity;
     Marker? closestMarker;
-    if (redisService.isConnected){
+    // String username = await _storage.read(key: 'username') ?? "defaultUsername";
+    // String password = await _storage.read(key: 'password') ?? "defaultPassword";
+    // await redisService.connect(username, password);
+    // await redisService.disconnect();
+    // if (redisService.isConnected) {
+      //alllocations = await redisService.fetchAllLocations();
       print(redisService.isConnected);
       for (var location in alllocations) {
         String locationKey = "${location['lat']},${location['lon']}";
@@ -349,7 +330,7 @@ void _updateMapMarkers() async {
           }
         }
       }
-    }
+    //}
     //print("closestID: $closestID");
     if (closestMarker != null) {
       closestDistance = closest;
