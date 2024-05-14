@@ -24,31 +24,51 @@ import 'package:flutter_background_service_android/flutter_background_service_an
 
 final FlutterSecureStorage _storage = const FlutterSecureStorage();
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
+String initialRoute = '/';
 
 void main() async {
+
   //final redisService = RedisService();
   WidgetsFlutterBinding.ensureInitialized();
   await requestPermissions();
   await initializeNotifications();
   await initializeService();
+  final NotificationAppLaunchDetails? notificationAppLaunchDetails = await flutterLocalNotificationsPlugin.getNotificationAppLaunchDetails();
+
+  if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
+    initialRoute = '/finder';
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => UserModel()),
+        
         //Provider<RedisService>.value(value: redisService),  // Provide RedisService
       ],
-      child: MyApp(),
+      child: MyApp(initialRoute: initialRoute),
     ),
   );
 }
 
 Future<void> requestPermissions() async {
+  var status = await Permission.locationWhenInUse.request();
+
+  if (status.isGranted) {
+    print("Location permission granted");
+  } else if (status.isDenied) {
+    print("Location permission denied");
+  } else if (status.isPermanentlyDenied) {
+    print("Location permission permanently denied");
+    openAppSettings();
+  }
+
   await [
     Permission.locationAlways,
     Permission.notification,
   ].request();
 }
+
 
 Future<void> initializeNotifications() async {
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -147,7 +167,7 @@ Future<void> showProximityNotification() async {
     'high_importance_channel', 'High Importance Notifications',
     importance: Importance.max,
     priority: Priority.high,
-    sound: RawResourceAndroidNotificationSound('proximity_alert'),
+    sound: RawResourceAndroidNotificationSound('notification'),
   );
   const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
   await flutterLocalNotificationsPlugin.show(
@@ -161,6 +181,10 @@ Future<void> showProximityNotification() async {
 
 
 class MyApp extends StatelessWidget {
+    final String initialRoute;
+
+    MyApp({required this.initialRoute});
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
@@ -182,10 +206,13 @@ class MyApp extends StatelessWidget {
               create: (context) => UserModel(),
               child: MaterialApp(
                 title: 'Terpiez Game',
+                navigatorKey: navigatorKey,
                 theme: ThemeData(
                   primarySwatch: Colors.blue,
                 ),
-                home: MyHomePage(),
+                initialRoute: initialRoute,
+                routes: {'/': (context) => MyHomePage(),
+                  '/finder': (context) => MyHomePage(initialTab: 1),},
               ),
             );
           } else {
@@ -599,7 +626,7 @@ void _updateMapMarkers() async {
     //print("closestID: $closestID");
     if (closestMarker != null) {
       if (closest <= 20) {
-        playSound('sounds/notification.wav');
+        //playSound('sounds/notification.wav');
       }
       closestDistance = closest;
       setState(() {
